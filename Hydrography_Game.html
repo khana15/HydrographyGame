@@ -1,0 +1,1291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Sonar Scout</title>
+  <style>
+    :root {
+      --bg: #140606;
+      --panel: #1a0b0b;
+      --accent: #ff6b3d;
+      --accent-2: #ffb347;
+      --text: #fff2e6;
+      --muted: #f2b8a2;
+      --danger: #ff4d4d;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: "Atkinson Hyperlegible", "Trebuchet MS", sans-serif;
+      background: radial-gradient(circle at top, #2a0d0a 0%, #120707 70%);
+      color: var(--text);
+    }
+
+    .wrap {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 20px;
+      display: grid;
+      gap: 16px;
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    header {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 28px;
+      letter-spacing: 0.5px;
+    }
+
+    .tagline {
+      color: var(--muted);
+      font-size: 14px;
+      max-width: 520px;
+    }
+
+    .panel {
+      background: linear-gradient(180deg, #2a1210 0%, #120707 100%);
+      border: 1px solid #3b1812;
+      border-radius: 16px;
+      padding: 16px;
+      box-shadow: 0 14px 30px rgba(0, 0, 0, 0.35);
+    }
+
+    .game-area {
+      display: grid;
+      gap: 12px;
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .sonar-topper {
+      display: flex;
+      justify-content: center;
+    }
+
+    .sonar-topper svg {
+      width: 100%;
+      max-width: 980px;
+      height: 90px;
+      background: linear-gradient(180deg, #1a0806 0%, #0f0504 100%);
+      border-radius: 14px;
+      border: 1px solid #3b1812;
+    }
+
+    canvas {
+      width: 100%;
+      height: 360px;
+      background: #120707;
+      border-radius: 14px;
+      border: 1px solid #3b1812;
+      display: block;
+    }
+
+    .hud {
+      display: grid;
+      gap: 10px;
+      grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+      font-size: 14px;
+    }
+
+    .hud div {
+      padding: 10px 12px;
+      background: #1a0b0b;
+      border-radius: 10px;
+      border: 1px solid #3b1812;
+    }
+
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+    }
+
+    button, select {
+      background: #2b120f;
+      border: 1px solid #5a2418;
+      color: var(--text);
+      padding: 8px 12px;
+      border-radius: 8px;
+      font-size: 14px;
+      cursor: pointer;
+    }
+
+    button:hover { border-color: var(--accent); }
+
+    .legend {
+      display: grid;
+      gap: 6px;
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    .legend span { color: var(--accent); }
+
+    .footer {
+      font-size: 12px;
+      color: var(--muted);
+      text-align: center;
+    }
+
+    .tutorial {
+      position: fixed;
+      inset: 0;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      background: rgba(10, 4, 4, 0.75);
+      z-index: 50;
+      padding: 20px;
+    }
+
+    .tutorial.active { display: flex; }
+
+    .tutorial-card {
+      max-width: 720px;
+      background: #1a0b0b;
+      border: 1px solid #5a2418;
+      border-radius: 16px;
+      padding: 20px;
+      box-shadow: 0 18px 40px rgba(0, 0, 0, 0.5);
+    }
+
+    .tutorial-card h2 {
+      margin-top: 0;
+    }
+
+    .tutorial-card ul {
+      margin: 0;
+      padding-left: 18px;
+    }
+
+    @media (max-width: 720px) {
+      canvas { height: 300px; }
+    }
+  </style>
+</head>
+<body>
+  <!-- [H1] Main App Container -->
+  <div class="wrap">
+    <!-- [H2] Top Bar: Title + Global Controls -->
+    <header>
+      <div>
+        <h1>Sonar Scout</h1>
+        <div class="tagline">Find hidden objects by reading side scan sonar outputs. Click to tag what you think is a target.</div>
+      </div>
+      <div class="controls">
+        <button id="startBtn">Start Scan</button>
+        <button id="pauseBtn">Pause</button>
+        <button id="resetBtn">New Run</button>
+        <button id="musicBtn">Music: On</button>
+        <button id="tutorialBtn">Tutorial</button>
+        <button id="pulseBtn">Scan Pulse</button>
+        <select id="mission"></select>
+        <button id="nextMissionBtn">Next Mission</button>
+        <select id="difficulty">
+          <option value="easy">Easy</option>
+          <option value="normal" selected>Normal</option>
+          <option value="hard">Hard</option>
+        </select>
+      </div>
+    </header>
+
+    <!-- [H3] Core Sonar View: Canvas + HUD -->
+    <section class="panel game-area">
+      <div class="sonar-topper" aria-hidden="true">
+        <svg viewBox="0 0 980 90" role="img" aria-label="Survey vessel and sonar beams">
+          <defs>
+            <linearGradient id="beam" x1="0" x2="0" y1="0" y2="1">
+              <stop offset="0%" stop-color="#ffb347" stop-opacity="0.7" />
+              <stop offset="100%" stop-color="#ff6b3d" stop-opacity="0.05" />
+            </linearGradient>
+          </defs>
+          <rect x="0" y="0" width="980" height="90" fill="transparent" />
+          <!-- Head-on ship outline: triangular hull (apex up), small superstructure -->
+          <polygon points="490,75 540,30 440,30" fill="#ffb347" opacity="0.95"/>
+          <rect x="464" y="15" width="54" height="15" rx="3" fill="#ffd9a6" opacity="0.95"/>
+          <polygon points="490,50 220,90 760,90" fill="url(#beam)"/>
+          <line x1="490" y1="50" x2="490" y2="90" stroke="#ffe7c4" stroke-opacity="0.5" />
+        </svg>
+      </div>
+      <canvas id="sonar" width="980" height="340" aria-label="Side scan sonar display"></canvas>
+      <div class="hud">
+        <div><strong>Score:</strong> <span id="score">0</span></div>
+        <div><strong>Targets Found:</strong> <span id="found">0</span>/<span id="total">0</span></div>
+        <div><strong>False Tags:</strong> <span id="falseTags">0</span></div>
+        <div><strong>Scan Speed:</strong> <span id="speed">1.0x</span></div>
+        <div><strong>Mission:</strong> <span id="missionName">-</span></div>
+        <div><strong>Goal:</strong> <span id="missionGoal">-</span></div>
+      </div>
+    </section>
+
+    <!-- [H4] Player Instructions -->
+    <section class="panel">
+      <div class="legend">
+        <div><span>How to play:</span> As the sonar scrolls, watch for bright highlights and dark acoustic shadows. Click to tag <strong>shipwrecks</strong> and <strong>crab pots</strong>. Make sure to watch for any <strong>fish</strong> getting in your way!</div>
+        <div><span>Tip:</span> Ignore fish. They are distractors and do not score.</div>
+        <div><span>Goal:</span> Tag at least 70% of the wrecks and crab pots with minimal false tags.</div>
+      </div>
+    </section>
+
+
+    <!-- [H5] Campaign Progress + Chapter Controls -->
+    <section class="panel">
+      <div class="legend">
+        <div><span>Campaign:</span> <strong id="campaignTitle">-</strong></div>
+        <div id="campaignText">-</div>
+        <div><span>Status:</span> <span id="campaignStatus">-</span></div>
+        <div class="controls">
+          <button id="startChapterBtn">Start Chapter</button>
+          <button id="advanceChapterBtn">Advance Chapter</button>
+        </div>
+      </div>
+    </section>
+
+    <div class="footer">Designed with a light footprint for educational use.</div>
+  </div>
+
+  <!-- [H6] Background Music -->
+  <audio id="bgm" loop preload="auto">
+    <source src="Sun%20%26%20Moon%20by%20Simon%20Chylinski.mp3" type="audio/mpeg" />
+  </audio>
+
+  <!-- [H7] Tutorial Modal -->
+  <div class="tutorial" id="tutorial">
+    <div class="tutorial-card">
+      <h2>How Side Scan Sonar Works</h2>
+      <p>The boat sends out fan-shaped sound beams to the left and right. The sound hits the seafloor and bounces back.</p>
+      <ul>
+        <li><strong>Swath:</strong> The area covered by the beams on each side of the boat.</li>
+        <li><strong>Slant range:</strong> The distance from the sonar to a spot on the seafloor.</li>
+        <li><strong>Highlights:</strong> Hard objects (like shipwrecks) reflect more sound and look bright.</li>
+        <li><strong>Shadows:</strong> Tall objects block the sound behind them, making dark shadows that project outwards, to the left and right of the return.</li>
+      </ul>
+      <p>In this game, tag shipwrecks and crab pots by finding a bright return with a darker shadow trailing away from the center line.</p>
+      <button id="closeTutorial">Got it</button>
+    </div>
+  </div>
+
+  <script>
+    // [S1] DOM References
+    const canvas = document.getElementById("sonar");
+    const ctx = canvas.getContext("2d");
+    const bgm = document.getElementById("bgm");
+    bgm.volume = 0.5;
+    const musicBtn = document.getElementById("musicBtn");
+    const missionSelect = document.getElementById("mission");
+    const nextMissionBtn = document.getElementById("nextMissionBtn");
+    const missionNameEl = document.getElementById("missionName");
+    const missionGoalEl = document.getElementById("missionGoal");
+    const pulseBtn = document.getElementById("pulseBtn");
+    const campaignTitleEl = document.getElementById("campaignTitle");
+    const campaignTextEl = document.getElementById("campaignText");
+    const campaignStatusEl = document.getElementById("campaignStatus");
+    const startChapterBtn = document.getElementById("startChapterBtn");
+    const advanceChapterBtn = document.getElementById("advanceChapterBtn");
+
+
+    // [S2] Runtime State
+    const state = {
+      running: false,
+      paused: false,
+      scrollY: 0,
+      speed: 1.0,
+      score: 0,
+      found: 0,
+      falseTags: 0,
+      targets: [],
+      totalTargets: 0,
+      clicks: [],
+      frameId: null,
+      noiseSeed: 0,
+      difficulty: "normal",
+      musicOn: true,
+      missionIndex: 0,
+      campaignIndex: 0,
+      lastMissionSuccess: false,
+      pulseIntensity: 0,
+      pulseCooldown: 0,
+      missionBackdrop: null
+    };
+
+
+    // [S3] Mission/Lesson Definitions
+    const missions = [
+      {
+        name: "Reef Sweep",
+        brief: "Shallow reef with crab pots and small wrecks.",
+        lessonTitle: "Lesson 1: Reef Mapping",
+        uniqueFeature: "Kelp corridors create distractions and distortions.",
+        goal: 0.7,
+        settings: { count: 8, size: [14, 24], shadow: [22, 36], speed: 1.1 },
+        mix: { wreck: 4, crab: 3, fish: 2 },
+        theme: {
+          palette: ["#123f3a", "#0d2c2a"],
+          overlay: "#7ad8b4",
+          motif: "kelp"
+        }
+      },
+      {
+        name: "Harbor Wreck",
+        brief: "A large ship has wrecked in the harbor. While investigating, you are caught in stormy seas that cause the scan window to sway.",
+        lessonTitle: "Lesson 2: Harbor Structure",
+        uniqueFeature: "Mooring lines mask returns and rough seas sway the scan window.",
+        goal: 0.75,
+        settings: { count: 10, size: [18, 30], shadow: [28, 46], speed: 1.2 },
+        mix: { wreck: 6, crab: 2, fish: 3 },
+        theme: {
+          palette: ["#3d2a1f", "#20150f"],
+          overlay: "#f2c58f",
+          motif: "harbor"
+        }
+      },
+      {
+        name: "Storm Debris",
+        brief: "Scattered debris field, dense fish schools, and sediment plumes from recent storms. Beware!",
+        lessonTitle: "Lesson 3: Post-Storm Search",
+        uniqueFeature: "Sediment plumes drift through the swath.",
+        goal: 0.8,
+        settings: { count: 12, size: [12, 26], shadow: [24, 38], speed: 1.3 },
+        mix: { wreck: 4, crab: 4, fish: 6 },
+        theme: {
+          palette: ["#3b2234", "#1b1118"],
+          overlay: "#ffb7d4",
+          motif: "storm"
+        }
+      },
+      {
+        name: "Deep Channel",
+        brief: "Long shadows, fewer targets, faster pass, and a darker return",
+        lessonTitle: "Lesson 4: Deep Transit",
+        uniqueFeature: "Canyon ridges shape long acoustic shadows.",
+        goal: 0.7,
+        settings: { count: 9, size: [16, 28], shadow: [30, 52], speed: 1.4 },
+        mix: { wreck: 5, crab: 1, fish: 2 },
+        theme: {
+          palette: ["#162744", "#0a1323"],
+          overlay: "#95c8ff",
+          motif: "canyon"
+        }
+      }
+    ];
+
+    const missionBackdropCache = new Map();
+
+    // [S4] Campaign Chapter Definitions
+    const campaign = [
+      {
+        title: "Chapter 1: The Training Run",
+        text: "You are a new sonar scout. Learn to spot wrecks near the reef while avoiding fish schools.",
+        missionIndex: 0
+      },
+      {
+        title: "Chapter 2: Harbor Mystery",
+        text: "A storm sank a vessel near the channel. Rough seas cause a slight side-to-side sway in your scan window.",
+        missionIndex: 1
+      },
+      {
+        title: "Chapter 3: Debris Field",
+        text: "Currents scattered debris. Expect clutter and lots of fish.",
+        missionIndex: 2
+      },
+      {
+        title: "Chapter 4: Deep Passage",
+        text: "A fast pass over deep water. Targets are sparse but shadows are long.",
+        missionIndex: 3
+      }
+    ];
+
+
+    // [S5] Audio Helpers
+    let audioCtx = null;
+    let audioUnlocked = false;
+
+    function ensureAudioUnlocked() {
+      if (audioUnlocked) return;
+      audioUnlocked = true;
+      bgm.load();
+      if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      }
+      if (audioCtx.state === "suspended") audioCtx.resume();
+      ensureAudioUnlocked();
+      if (state.musicOn) {
+        bgm.play().catch(() => {});
+      }
+    }
+
+    function playBeep(freq, duration, volume) {
+      if (!audioCtx) return;
+      if (audioCtx.state === "suspended") audioCtx.resume();
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = "sine";
+      osc.frequency.value = freq;
+      gain.gain.value = volume;
+      osc.connect(gain).connect(audioCtx.destination);
+      osc.start();
+      osc.stop(audioCtx.currentTime + duration);
+    }
+
+
+    // [S6] HUD References
+    const stats = {
+      score: document.getElementById("score"),
+      found: document.getElementById("found"),
+      total: document.getElementById("total"),
+      falseTags: document.getElementById("falseTags"),
+      speed: document.getElementById("speed")
+    };
+
+    // [S7] Utility Functions
+    function rand(min, max) {
+      return Math.random() * (max - min) + min;
+    }
+
+    function clamp(value, min, max) {
+      return Math.min(Math.max(value, min), max);
+    }
+
+    // [S8] Target Generation
+    function buildTargets() {
+      const diff = { easy: 0.85, normal: 1.0, hard: 2.15 }[state.difficulty];
+      const mission = missions[state.missionIndex];
+      const settings = {
+        count: Math.round(mission.settings.count * diff),
+        size: mission.settings.size,
+        shadow: mission.settings.shadow,
+        speed: mission.settings.speed * diff
+      };
+
+      state.targets = [];
+      const typePool = [];
+      Object.entries(mission.mix).forEach(([type, weight]) => {
+        for (let i = 0; i < weight; i++) typePool.push(type);
+      });
+      const center = canvas.width / 2;
+      const band = 60;
+      let eligibleCount = 0;
+      for (let i = 0; i < settings.count; i++) {
+        const type = typePool[Math.floor(rand(0, typePool.length))];
+        const size = rand(settings.size[0], settings.size[1]);
+        const shadow = rand(settings.shadow[0], settings.shadow[1]);
+        const hull = rand(1.4, 2.1);
+        const angle = rand(-0.3, 0.3);
+        const points = type === "wreck" || type === "crab";
+        if (points) eligibleCount += 1;
+
+        let x = center;
+        let y = 160 + i * rand(120, 180);
+        for (let attempt = 0; attempt < 36; attempt++) {
+          const side = Math.random() < 0.5 ? -1 : 1;
+          const tryX = center + side * rand(band + 40, center - 80);
+          const tryY = 160 + i * rand(120, 180) + rand(-24, 24);
+          const overlaps = state.targets.some(existing => {
+            const dist = Math.hypot(tryX - existing.x, tryY - existing.y);
+            const fishToFish = type === "fish" && existing.type === "fish";
+            const padding = fishToFish ? 64 : 24;
+            const factor = fishToFish ? 2.7 : 1.45;
+            return dist < (size + existing.size) * factor + padding;
+          });
+          if (!overlaps || attempt === 35) {
+            x = tryX;
+            y = tryY;
+            break;
+          }
+        }
+
+        const schoolScale = type === "fish" ? rand(0.6, 1.4) : 1;
+        const schoolCount = type === "fish" ? Math.floor(rand(2, 10)) : 1;
+        const schoolSpread = type === "fish" ? rand(40, 90) : 0; //This increases spread of fish
+        const fishOffsets = [];
+        if (type === "fish") {
+          const localMinGap = Math.max(20, schoolSpread * 0.40); //Increase this to force fish to keep their distance from each other
+          for (let f = 0; f < schoolCount; f++) {
+            let offset = { x: 0, y: 0, scale: rand(0.7, 1.15), angleJitter: rand(-0.22, 0.22) };
+            for (let attempt = 0; attempt < 12; attempt++) {
+              const candidate = {
+                x: (Math.random() - 0.5) * schoolSpread,
+                y: (Math.random() - 0.5) * schoolSpread,
+                scale: rand(0.7, 1.15),
+                angleJitter: rand(-0.22, 0.22)
+              };
+              const overlap = fishOffsets.some(existing => Math.hypot(candidate.x - existing.x, candidate.y - existing.y) < localMinGap);
+              if (!overlap || attempt === 23) {
+                offset = candidate;
+                break;
+              }
+            }
+            fishOffsets.push(offset);
+          }
+        }
+
+        state.targets.push({
+          x,
+          y,
+          size,
+          shadow,
+          hull,
+          angle,
+          type,
+          points,
+          found: false,
+          tagged: false,
+          schoolScale,
+          schoolCount,
+          schoolSpread,
+          fishOffsets
+        });
+      }
+      state.speed = settings.speed;
+      state.totalTargets = eligibleCount;
+      stats.total.textContent = eligibleCount;
+      stats.speed.textContent = `${state.speed.toFixed(1)}x`;
+    }
+
+    function resetRun() {
+      state.scrollY = 0;
+      state.score = 0;
+      state.found = 0;
+      state.falseTags = 0;
+      state.clicks = [];
+      state.pulseIntensity = 0;
+      state.pulseCooldown = 0;
+      state.noiseSeed = Math.random() * 1000;
+      buildTargets();
+      updateHud();
+    }
+
+    function updateHud() {
+      stats.score.textContent = state.score;
+      stats.found.textContent = state.found;
+      stats.falseTags.textContent = state.falseTags;
+      const mission = missions[state.missionIndex];
+      missionNameEl.textContent = mission.name;
+      missionGoalEl.textContent = `${Math.round(mission.goal * 100)}%`;
+      const chapter = campaign[state.campaignIndex];
+      campaignTitleEl.textContent = chapter.title;
+      campaignTextEl.textContent = chapter.text;
+    }
+
+    
+    // [S9] Mission/Campaign Selection
+    function setCampaign(index) {
+      state.campaignIndex = (index + campaign.length) % campaign.length;
+      const chapter = campaign[state.campaignIndex];
+      state.lastMissionSuccess = false;
+      setMission(chapter.missionIndex);
+      updateHud();
+    }
+
+    function setMission(index) {
+      state.missionIndex = (index + missions.length) % missions.length;
+      missionSelect.value = String(state.missionIndex);
+      state.missionBackdrop = getMissionBackdrop(state.missionIndex);
+      resetRun();
+      drawBackground();
+      drawSeabed();
+      drawMissionFeature();
+      drawTargets();
+      drawOverlay();
+      applyMissionWindowFx();
+    }
+
+    // [S10] Background + Mission Feature Rendering
+    function getMissionBackdrop(missionIndex) {
+      if (missionBackdropCache.has(missionIndex)) {
+        return missionBackdropCache.get(missionIndex);
+      }
+
+      const mission = missions[missionIndex];
+      const offscreen = document.createElement("canvas");
+      offscreen.width = canvas.width;
+      offscreen.height = canvas.height;
+      const bg = offscreen.getContext("2d");
+
+      const grad = bg.createLinearGradient(0, 0, 0, offscreen.height);
+      grad.addColorStop(0, mission.theme.palette[0]);
+      grad.addColorStop(1, mission.theme.palette[1]);
+      bg.fillStyle = grad;
+      bg.fillRect(0, 0, offscreen.width, offscreen.height);
+
+      bg.strokeStyle = "rgba(255,255,255,0.08)";
+      bg.lineWidth = 2;
+
+      if (mission.theme.motif === "kelp") {
+        for (let i = 0; i < 9; i++) {
+          const baseX = 90 + i * 95;
+          bg.beginPath();
+          bg.moveTo(baseX, offscreen.height);
+          bg.bezierCurveTo(baseX - 30, 250, baseX + 22, 170, baseX - 8, 40);
+          bg.stroke();
+        }
+      } else if (mission.theme.motif === "harbor") {
+        for (let i = 0; i < 6; i++) {
+          const x = 110 + i * 145;
+          bg.fillStyle = "rgba(255,255,255,0.07)";
+          bg.fillRect(x, 30, 10, offscreen.height - 60);
+          bg.beginPath();
+          bg.moveTo(x + 5, 85);
+          bg.lineTo(x + 95, 160);
+          bg.stroke();
+        }
+      } else if (mission.theme.motif === "storm") {
+        for (let i = 0; i < 55; i++) {
+          const x = Math.random() * offscreen.width;
+          const y = Math.random() * offscreen.height;
+          const r = 4 + Math.random() * 14;
+          bg.fillStyle = "rgba(255,255,255,0.05)";
+          bg.beginPath();
+          bg.arc(x, y, r, 0, Math.PI * 2);
+          bg.fill();
+        }
+      } else {
+        for (let i = 0; i < 7; i++) {
+          const y = 70 + i * 46;
+          bg.beginPath();
+          bg.moveTo(0, y + Math.sin(i) * 12);
+          for (let x = 0; x <= offscreen.width; x += 28) {
+            bg.lineTo(x, y + Math.sin((x * 0.02) + i) * 16);
+          }
+          bg.stroke();
+        }
+      }
+
+      missionBackdropCache.set(missionIndex, offscreen);
+      return offscreen;
+    }
+
+    function drawBackground() {
+      const mission = missions[state.missionIndex];
+      const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+      gradient.addColorStop(0, mission.theme.palette[0]);
+      gradient.addColorStop(1, mission.theme.palette[1]);
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      if (state.missionBackdrop) {
+        ctx.globalAlpha = 0.34;
+        ctx.drawImage(state.missionBackdrop, 0, 0, canvas.width, canvas.height);
+        ctx.globalAlpha = 1;
+      }
+    }
+
+    function seabedNoise(x, y) {
+      const scale = 0.03;
+      return Math.sin((x + state.noiseSeed) * scale) * 0.5 + Math.cos((y + state.noiseSeed) * scale * 1.4) * 0.5;
+    }
+
+    function drawSeabed() {
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const data = imageData.data;
+      const center = canvas.width / 2;
+      const nadirWidth = 36;
+
+      for (let y = 0; y < canvas.height; y++) {
+        for (let x = 0; x < canvas.width; x++) {
+          const idx = (y * canvas.width + x) * 4;
+          const depth = y / canvas.height;
+          const distFromCenter = Math.abs(x - center);
+          const isNadir = distFromCenter < nadirWidth;
+          const falloff = clamp((distFromCenter - nadirWidth) / (center - nadirWidth), 0, 1);
+          const coarse = seabedNoise(x * 0.9, y + state.scrollY * 10);
+          const fine = Math.sin((x + state.scrollY * 4) * 0.6) * 0.2 + Math.cos((y + state.scrollY * 6) * 0.7) * 0.2;
+          const hash = Math.sin(x * 12.9898 + (y + state.scrollY * 0.2) * 78.233) * 43758.5453;
+          const speckle = (hash - Math.floor(hash) - 0.5) * 10;
+
+          if (isNadir) {
+            data[idx] = 10;
+            data[idx + 1] = 4;
+            data[idx + 2] = 4;
+            data[idx + 3] = 255;
+            continue;
+          }
+
+          const pulseBoost = state.pulseIntensity * 60;
+          const intensity = 52 + depth * 90 + coarse * 26 + fine * 40 + falloff * 70 + speckle + pulseBoost;
+          data[idx] = clamp(intensity + 160, 0, 255);
+          data[idx + 1] = clamp(intensity + 55, 0, 255);
+          data[idx + 2] = clamp(intensity * 0.15, 0, 255);
+          data[idx + 3] = 255;
+        }
+      }
+
+      ctx.putImageData(imageData, 0, 0);
+    }
+
+    function drawMissionFeature() {
+      const mission = missions[state.missionIndex];
+      const shift = (state.scrollY * 0.6) % canvas.height;
+
+      ctx.save();
+      if (mission.theme.motif === "kelp") {
+        ctx.strokeStyle = "rgba(122, 216, 180, 0.2)";
+        ctx.lineWidth = 2;
+        for (let i = 0; i < 6; i++) {
+          const x = 60 + i * 150;
+          ctx.beginPath();
+          ctx.moveTo(x, canvas.height);
+          ctx.bezierCurveTo(x - 14, 280 - shift, x + 24, 160 - shift, x - 6, 20 - shift);
+          ctx.stroke();
+        }
+      } else if (mission.theme.motif === "harbor") {
+        ctx.strokeStyle = "rgba(242, 197, 143, 0.2)";
+        ctx.lineWidth = 1.5;
+        for (let i = 0; i < 5; i++) {
+          const x = 140 + i * 170;
+          const y = (i * 65 + shift) % (canvas.height + 60) - 30;
+          ctx.beginPath();
+          ctx.moveTo(x, y);
+          ctx.lineTo(x + 80, y + 36);
+          ctx.stroke();
+        }
+      } else if (mission.theme.motif === "storm") {
+        ctx.fillStyle = "rgba(255, 183, 212, 0.09)";
+        for (let i = 0; i < 18; i++) {
+          const x = (i * 61 + shift * 2) % canvas.width;
+          const y = (i * 37 + shift) % canvas.height;
+          ctx.beginPath();
+          ctx.arc(x, y, 8 + (i % 4) * 3, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      } else {
+        ctx.strokeStyle = "rgba(149, 200, 255, 0.18)";
+        ctx.lineWidth = 2;
+        for (let i = 0; i < 4; i++) {
+          const ridgeY = ((i * 95) + shift) % (canvas.height + 80) - 40;
+          ctx.beginPath();
+          ctx.moveTo(0, ridgeY + 20);
+          ctx.lineTo(canvas.width * 0.35, ridgeY - 10);
+          ctx.lineTo(canvas.width * 0.7, ridgeY + 35);
+          ctx.lineTo(canvas.width, ridgeY + 5);
+          ctx.stroke();
+        }
+      }
+      ctx.restore();
+    }
+
+    function drawOverlay() {
+      const mission = missions[state.missionIndex];
+      const center = canvas.width / 2;
+      const gridAlpha = state.running && !state.paused ? 0.02 : 0.08;
+      const spacing = 60;
+
+      ctx.save();
+      ctx.strokeStyle = `rgba(255, 228, 200, ${gridAlpha})`;
+      ctx.lineWidth = 1;
+      for (let x = spacing; x < canvas.width; x += spacing) {
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, canvas.height);
+        ctx.stroke();
+      }
+      for (let y = spacing; y < canvas.height; y += spacing) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(canvas.width, y);
+        ctx.stroke();
+      }
+      ctx.restore();
+
+      ctx.strokeStyle = "rgba(255, 232, 210, 0.6)";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(center, 10);
+      ctx.lineTo(center, canvas.height - 10);
+      ctx.stroke();
+
+      ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
+      ctx.fillRect(12, 12, 110, 64);
+      ctx.fillRect(canvas.width - 122, 12, 110, 64);
+
+      ctx.fillStyle = "#ffe0c2";
+      ctx.font = "12px 'Trebuchet MS', sans-serif";
+      ctx.fillText("Sonar (SS)", 20, 30);
+      ctx.fillText(`Speed ${state.speed.toFixed(1)}x`, 20, 48);
+      ctx.fillText(`Depth 8.4ft`, 20, 66);
+
+      ctx.fillText("Range", canvas.width - 110, 30);
+      ctx.fillText("60 m", canvas.width - 110, 48);
+      ctx.fillText("Track", canvas.width - 110, 66);
+
+      ctx.fillStyle = "rgba(0, 0, 0, 0.55)";
+      ctx.fillRect(12, canvas.height - 56, 420, 38);
+      ctx.fillStyle = mission.theme.overlay;
+      ctx.fillText(`${mission.lessonTitle} | ${mission.uniqueFeature}`, 20, canvas.height - 33);
+    }
+
+    function drawGrainyShadow(pathBuilder, shadowLength, shadowWidth, grainDensity = 40) {
+      ctx.save();
+
+      // Layered silhouette projection to keep shadow shape matched to the casting object.
+      const layers = 5;
+      for (let layer = 0; layer < layers; layer++) {
+        const blend = layer / (layers - 1);
+        const shiftX = shadowLength * (0.45 + blend * 1.2);
+        const shiftY = shadowWidth * (0.24 + blend * 0.72);
+        const stretchX = 1 + blend * 1.1;
+        const stretchY = 1 + blend * 0.42;
+
+        ctx.save();
+        ctx.translate(shiftX, shiftY);
+        ctx.scale(stretchX, stretchY);
+        ctx.beginPath();
+        pathBuilder();
+        ctx.fillStyle = `rgba(4, 2, 2, ${0.22 - blend * 0.14})`;
+        ctx.fill();
+        ctx.restore();
+      }
+
+      // Speckled sonar noise for grainy acoustic shadow texture.
+      const grains = Math.floor(grainDensity * 0.7 + shadowLength * 0.9);
+      for (let i = 0; i < grains; i++) {
+        const jitterX = shadowLength * rand(0.35, 2.05);
+        const jitterY = (Math.random() - 0.35) * shadowWidth * 1.8 + shadowWidth * 0.95;
+        const r = rand(0.45, 1.8);
+        const alpha = rand(0.03, 0.14);
+        ctx.fillStyle = `rgba(3, 2, 2, ${alpha})`;
+        ctx.beginPath();
+        ctx.arc(jitterX, jitterY, r, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      ctx.restore();
+    }
+
+    // [S11] Target Rendering
+    function drawWreck(screenX, screenY, target) {
+      ctx.save();
+      ctx.translate(screenX, screenY);
+      ctx.rotate(target.angle);
+
+// Calculate center of the screen
+const center = canvas.width / 2;
+
+// If target.x is 100 and center is 400, sideFactor is -1 (Left)
+// If target.x is 700 and center is 400, sideFactor is 1 (Right)
+const sideFactor = target.x < center ? -1 : 1;
+
+      // Grainy hull-shaped acoustic shadow. Trying to make the shadow reflect correctly based on the
+      drawGrainyShadow(() => {
+        ctx.moveTo(-target.size * target.hull * 1.2, target.size * 0.25);
+        ctx.lineTo(target.size * target.hull * 1.1, target.size * 0.5);
+        ctx.lineTo(target.size * target.hull * 0.9, -target.size * 0.5);
+        ctx.lineTo(-target.size * target.hull * 1.0, -target.size * 0.35);
+        ctx.closePath();
+      }, target.shadow * 0.78, target.size * 0.92, 52);
+
+      // Bright return (complex hull + debris)
+      const highlight = `rgba(${248 + target.size * 0.9}, ${178 + target.size * 0.6}, 100, 1)`;
+      ctx.fillStyle = highlight;
+      ctx.beginPath();
+      ctx.moveTo(-target.size * target.hull * 1.2, -target.size * 0.25);
+      ctx.lineTo(target.size * target.hull * 1.1, -target.size * 0.5);
+      ctx.lineTo(target.size * target.hull * 0.9, target.size * 0.5);
+      ctx.lineTo(-target.size * target.hull * 1.0, target.size * 0.35);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.fillStyle = "rgba(120, 60, 40, 0.35)";
+      ctx.beginPath();
+      ctx.moveTo(-target.size * 0.6, -target.size * 0.15);
+      ctx.lineTo(target.size * 0.25, -target.size * 0.4);
+      ctx.lineTo(target.size * 0.1, target.size * 0.1);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.fillStyle = "rgba(255, 215, 155, 0.98)";
+      ctx.fillRect(-target.size * 0.5, -target.size * 0.85, target.size * 1.0, target.size * 0.35);
+      ctx.beginPath();
+      ctx.ellipse(target.size * 0.8, -target.size * 0.1, target.size * 0.45, target.size * 0.2, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.restore();
+    }
+
+    function drawCrabPot(screenX, screenY, target) {
+      ctx.save();
+      ctx.translate(screenX, screenY);
+      ctx.rotate(target.angle * 0.6);
+
+      // Grainy pot-shaped acoustic shadow.
+      drawGrainyShadow(() => {
+        ctx.rect(-target.size * 0.6, -target.size * 0.35, target.size * 1.2, target.size * 0.7);
+      }, target.shadow * 0.56, target.size * 0.7, 34);
+
+      ctx.fillStyle = "rgba(255, 235, 175, 0.98)";
+      ctx.beginPath();
+      ctx.rect(-target.size * 0.6, -target.size * 0.35, target.size * 1.2, target.size * 0.7);
+      ctx.fill();
+
+      ctx.strokeStyle = "rgba(255, 195, 140, 0.92)";
+      ctx.lineWidth = 2;
+      ctx.strokeRect(-target.size * 0.6, -target.size * 0.35, target.size * 1.2, target.size * 0.7);
+
+      // Pot ribs
+      ctx.beginPath();
+      ctx.moveTo(-target.size * 0.2, -target.size * 0.35);
+      ctx.lineTo(-target.size * 0.2, target.size * 0.35);
+      ctx.moveTo(target.size * 0.2, -target.size * 0.35);
+      ctx.lineTo(target.size * 0.2, target.size * 0.35);
+      ctx.stroke();
+
+      ctx.restore();
+    }
+
+    function drawFish(screenX, screenY, target) {
+      ctx.save();
+      ctx.translate(screenX, screenY);
+      ctx.rotate(target.angle * 0.8);
+
+      const size = target.size * target.schoolScale;
+
+      // Grainy fish-shaped shadow (body + tail silhouette).
+      drawGrainyShadow(() => {
+        ctx.ellipse(0, 0, size * 0.7, size * 0.35, 0, 0, Math.PI * 2);
+        ctx.moveTo(-size * 0.7, 0);
+        ctx.lineTo(-size * 1.05, -size * 0.2);
+        ctx.lineTo(-size * 1.05, size * 0.2);
+        ctx.closePath();
+      }, target.shadow * 0.4, size * 0.5, 24);
+
+      ctx.fillStyle = "rgba(255, 238, 185, 0.95)";
+      ctx.beginPath();
+      ctx.ellipse(0, 0, size * 0.7, size * 0.35, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.beginPath();
+      ctx.moveTo(-size * 0.7, 0);
+      ctx.lineTo(-size * 1.05, -size * 0.2);
+      ctx.lineTo(-size * 1.05, size * 0.2);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.restore();
+    }
+
+    // [S12] Frame Overlay + Window FX
+    function drawTargets() {
+      state.targets.forEach(target => {
+        const screenY = target.y - state.scrollY;
+        if (screenY < -80 || screenY > canvas.height + 80) return;
+        if (target.type === "crab") {
+          drawCrabPot(target.x, screenY, target);
+        } else if (target.type === "fish") {
+          const cachedScale = target.schoolScale || 1;
+          const offsets = target.fishOffsets || [{ x: 0, y: 0, scale: 1, angleJitter: 0 }];
+          offsets.forEach(offset => {
+            const fishTarget = {
+              ...target,
+              schoolScale: cachedScale * offset.scale,
+              angle: target.angle + (offset.angleJitter || 0)
+            };
+            drawFish(target.x + offset.x, screenY + offset.y, fishTarget);
+          });
+        } else {
+          drawWreck(target.x, screenY, target);
+        }
+      });
+    }
+
+    function applyMissionWindowFx() {
+      const mission = missions[state.missionIndex];
+      const t = performance.now() / 1000;
+      let transform = "translate3d(0px, 0px, 0px) rotate(0deg)";
+      let filter = "none";
+      let borderColor = "#3b1812";
+      let boxShadow = "0 0 0 rgba(0, 0, 0, 0)";
+
+      if (mission.theme.motif === "kelp") {
+        const bob = Math.sin(t * 1.15) * 0.8;
+        transform = `translate3d(0px, ${bob.toFixed(2)}px, 0px)`;
+        filter = "saturate(1.05)";
+        borderColor = "#2c6e63";
+        boxShadow = "0 0 22px rgba(122, 216, 180, 0.16)";
+      } else if (mission.theme.motif === "harbor") {
+        const swayX = Math.sin(t * 1.9) * 3.2;
+        const swayTilt = Math.sin(t * 1.9 + 0.6) * 0.45;
+        transform = `translate3d(${swayX.toFixed(2)}px, 0px, 0px) rotate(${swayTilt.toFixed(2)}deg)`;
+        filter = "contrast(1.03)";
+        borderColor = "#7a553c";
+        boxShadow = "0 0 20px rgba(242, 197, 143, 0.18)";
+      } else if (mission.theme.motif === "storm") {
+        const jitterX = Math.sin(t * 7.2) * 0.8;
+        const jitterY = Math.cos(t * 6.3) * 0.65;
+        transform = `translate3d(${jitterX.toFixed(2)}px, ${jitterY.toFixed(2)}px, 0px)`;
+        filter = "contrast(1.08) saturate(1.08)";
+        borderColor = "#7a405f";
+        boxShadow = "0 0 24px rgba(255, 183, 212, 0.16)";
+      } else {
+        const deepDrift = Math.sin(t * 0.8) * 1.1;
+        transform = `translate3d(0px, ${deepDrift.toFixed(2)}px, 0px) scale(1.004)`;
+        filter = "contrast(1.06)";
+        borderColor = "#38557c";
+        boxShadow = "0 0 20px rgba(149, 200, 255, 0.14)";
+      }
+
+      canvas.style.transform = transform;
+      canvas.style.filter = filter;
+      canvas.style.borderColor = borderColor;
+      canvas.style.boxShadow = boxShadow;
+    }
+
+    // [S13] Gameplay Loop
+    function drawClicks() {
+      state.clicks.forEach(click => {
+        const alpha = clamp(1 - (performance.now() - click.time) / 2000, 0, 1);
+        ctx.strokeStyle = click.hit ? `rgba(111, 231, 255, ${alpha})` : `rgba(255, 122, 122, ${alpha})`;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(click.x, click.y, 14, 0, Math.PI * 2);
+        ctx.stroke();
+      });
+      state.clicks = state.clicks.filter(click => performance.now() - click.time < 2000);
+    }
+
+    function advanceScanStep(multiplier = 1) {
+      state.scrollY += state.speed * multiplier;
+
+      if (state.pulseIntensity > 0) {
+        state.pulseIntensity = Math.max(0, state.pulseIntensity - 0.04 * multiplier);
+      }
+      if (state.pulseCooldown > 0) {
+        state.pulseCooldown = Math.max(0, state.pulseCooldown - 0.02 * multiplier);
+        if (state.pulseCooldown <= 0.01) pulseBtn.textContent = "Scan Pulse";
+      }
+
+      drawBackground();
+      drawSeabed();
+      drawMissionFeature();
+      drawTargets();
+      drawClicks();
+      drawOverlay();
+      applyMissionWindowFx();
+    }
+
+    function scanStep() {
+      if (!state.running || state.paused) return;
+      advanceScanStep(1);
+
+      if (state.scrollY > canvas.height + 400) {
+        state.running = false;
+        showSummary();
+      } else {
+        state.frameId = requestAnimationFrame(scanStep);
+      }
+    }
+
+    function showSummary() {
+      ctx.fillStyle = "rgba(0,0,0,0.65)";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      const mission = missions[state.missionIndex];
+      const accuracy = state.totalTargets ? state.found / state.totalTargets : 0;
+      const success = accuracy >= mission.goal;
+      state.lastMissionSuccess = success;
+      updateHud();
+      ctx.fillStyle = "#e7edf2";
+      ctx.font = "22px 'Trebuchet MS', sans-serif";
+      ctx.fillText(success ? "Mission complete!" : "Mission failed", canvas.width / 2 - 85, canvas.height / 2 - 16);
+      ctx.font = "16px 'Trebuchet MS', sans-serif";
+      ctx.fillText(`Score: ${state.score}`, canvas.width / 2 - 40, canvas.height / 2 + 10);
+      ctx.fillText(`Accuracy: ${Math.round(accuracy * 100)}%`, canvas.width / 2 - 55, canvas.height / 2 + 32);
+    }
+
+    function handleClick(event) {
+      if (!state.running) return;
+      ensureAudioUnlocked();
+      const rect = canvas.getBoundingClientRect();
+      const x = ((event.clientX - rect.left) / rect.width) * canvas.width;
+      const y = ((event.clientY - rect.top) / rect.height) * canvas.height;
+
+      let hit = false;
+      for (const target of state.targets) {
+        const screenY = target.y - state.scrollY;
+        const dx = x - target.x;
+        const dy = y - screenY;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist < target.size * 1.1 && !target.tagged && screenY > 0 && screenY < canvas.height) {
+          target.tagged = true;
+          if (target.points) {
+            target.found = true;
+            hit = true;
+            state.found += 1;
+            state.score += 100;
+            playBeep(720, 0.12, 0.08);
+          } else {
+            playBeep(240, 0.16, 0.06);
+          }
+          break;
+        }
+      }
+
+      if (!hit) {
+        state.falseTags += 1;
+        state.score = Math.max(0, state.score - 30);
+        playBeep(180, 0.18, 0.06);
+      }
+
+      state.clicks.push({ x, y, time: performance.now(), hit });
+      updateHud();
+    }
+
+    // [S14] Input/Event Wiring
+    document.getElementById("startBtn").addEventListener("click", () => {
+      if (!state.running) {
+        state.running = true;
+        state.paused = false;
+        cancelAnimationFrame(state.frameId);
+        scanStep();
+      }
+      ensureAudioUnlocked();
+      if (state.musicOn) {
+        bgm.play().catch(() => {});
+      }
+    });
+
+    document.getElementById("pauseBtn").addEventListener("click", () => {
+      state.paused = !state.paused;
+      if (!state.paused) scanStep();
+    });
+
+    document.getElementById("resetBtn").addEventListener("click", () => {
+      cancelAnimationFrame(state.frameId);
+      state.running = false;
+      state.paused = false;
+      resetRun();
+      drawBackground();
+      drawSeabed();
+      drawMissionFeature();
+      drawTargets();
+    });
+
+    pulseBtn.addEventListener("click", () => {
+      ensureAudioUnlocked();
+      if (state.pulseCooldown > 0) return;
+      state.pulseIntensity = 1;
+      state.pulseCooldown = 1;
+      pulseBtn.textContent = "Pulse Cooldown";
+      playBeep(520, 0.08, 0.06);
+    });
+
+    musicBtn.addEventListener("click", () => {
+      state.musicOn = !state.musicOn;
+      musicBtn.textContent = state.musicOn ? "Music: On" : "Music: Off";
+      ensureAudioUnlocked();
+      if (state.musicOn) {
+        bgm.play().catch(() => {});
+      } else {
+        bgm.pause();
+      }
+    });
+
+
+    missions.forEach((mission, idx) => {
+      const opt = document.createElement("option");
+      opt.value = String(idx);
+      opt.textContent = mission.name;
+      missionSelect.appendChild(opt);
+    });
+    missionSelect.value = "0";
+
+    missionSelect.addEventListener("change", (event) => {
+      setMission(parseInt(event.target.value, 10));
+    });
+
+    nextMissionBtn.addEventListener("click", () => {
+      setMission(state.missionIndex + 1);
+    });
+
+    startChapterBtn.addEventListener("click", () => {
+      const chapter = campaign[state.campaignIndex];
+      setMission(chapter.missionIndex);
+    });
+
+    advanceChapterBtn.addEventListener("click", () => {
+      if (!state.lastMissionSuccess) return;
+      setCampaign(state.campaignIndex + 1);
+    });
+
+    document.getElementById("difficulty").addEventListener("change", (event) => {
+      state.difficulty = event.target.value;
+      resetRun();
+      drawBackground();
+      drawSeabed();
+      drawMissionFeature();
+      drawTargets();
+    });
+
+    canvas.addEventListener("click", handleClick);
+
+    window.addEventListener("pointerdown", ensureAudioUnlocked, { once: true });
+
+    const tutorial = document.getElementById("tutorial");
+    document.getElementById("tutorialBtn").addEventListener("click", () => {
+      tutorial.classList.add("active");
+    });
+    document.getElementById("closeTutorial").addEventListener("click", () => {
+      tutorial.classList.remove("active");
+    });
+
+    // [S15] Automation/Test Hooks
+    function renderGameToText() {
+      const mission = missions[state.missionIndex];
+      const activeTargets = state.targets
+        .map((t) => ({
+          type: t.type,
+          points: t.points,
+          tagged: t.tagged,
+          x: Math.round(t.x),
+          y: Math.round(t.y - state.scrollY),
+          size: Math.round(t.size)
+        }))
+        .filter((t) => t.y > -100 && t.y < canvas.height + 100);
+
+      return JSON.stringify({
+        coordinate_system: "origin at top-left; x right; y down",
+        mode: state.running ? (state.paused ? "paused" : "running") : "idle",
+        mission: { name: mission.name, lesson: mission.lessonTitle, unique: mission.uniqueFeature },
+        scrollY: Math.round(state.scrollY),
+        speed: Number(state.speed.toFixed(2)),
+        score: state.score,
+        found: state.found,
+        totalTargets: state.totalTargets,
+        falseTags: state.falseTags,
+        pulse: { intensity: Number(state.pulseIntensity.toFixed(2)), cooldown: Number(state.pulseCooldown.toFixed(2)) },
+        visible_targets: activeTargets
+      });
+    }
+
+    window.render_game_to_text = renderGameToText;
+    window.advanceTime = (ms) => {
+      const steps = Math.max(1, Math.round(ms / (1000 / 60)));
+      const multiplier = (ms / (1000 / 60)) / steps;
+      for (let i = 0; i < steps; i++) {
+        if (!state.running || state.paused) break;
+        advanceScanStep(multiplier);
+      }
+      if (state.scrollY > canvas.height + 400 && state.running) {
+        state.running = false;
+        showSummary();
+      }
+    };
+
+    // [S16] Initial Boot Render
+    setCampaign(0);
+    drawBackground();
+    drawSeabed();
+    drawMissionFeature();
+    drawTargets();
+    applyMissionWindowFx();
+  </script>
+</body>
+</html>
